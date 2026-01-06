@@ -1,19 +1,27 @@
 export async function handler(event) {
   try {
-    const { text } = JSON.parse(event.body)
+    const { text } = JSON.parse(event.body || "{}")
+
+    if (!text) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "No text provided" }),
+      }
+    }
 
     const prompt = `
 You are a medical assistant.
 
-Convert the following doctor's speech into STRICT JSON.
+Your job is to convert doctor's free speech into STRICT JSON.
 
-Rules:
-- Medicines must be an ARRAY
-- Each medicine must be separate
-- Advice must be an ARRAY
-- Do NOT merge medicines
-- Do NOT write explanations
-- Output JSON ONLY
+Rules (must follow):
+- Output MUST be valid JSON
+- Do NOT use markdown
+- Do NOT add explanations
+- Medicines MUST be an array
+- Each medicine MUST be a separate object
+- Advice MUST be an array
+- If a field is unknown, return empty string
 
 Format:
 {
@@ -46,11 +54,25 @@ ${text}
     )
 
     const data = await response.json()
-    const output = data.candidates[0].content.parts[0].text
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || ""
+
+    let structured
+    try {
+      structured = JSON.parse(raw)
+    } catch (err) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: "AI returned invalid JSON",
+          raw,
+        }),
+      }
+    }
 
     return {
       statusCode: 200,
-      body: output,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(structured),
     }
   } catch (err) {
     return {
