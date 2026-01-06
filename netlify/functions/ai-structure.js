@@ -1,3 +1,11 @@
+return {
+  statusCode: 200,
+  body: JSON.stringify({
+    test: "AI FUNCTION VERSION 3 – PREPROCESSING ACTIVE",
+    timestamp: new Date().toISOString()
+  })
+}
+
 export async function handler(event) {
   try {
     const body = JSON.parse(event.body || "{}")
