@@ -3,20 +3,21 @@ export async function handler(event) {
     const { text } = JSON.parse(event.body)
 
     const prompt = `
-You are a medical data structuring engine.
+You are a backend medical data extraction engine.
 
-Your task:
-Convert the doctor's text into STRICT VALID JSON.
+You MUST follow these rules strictly.
 
-ABSOLUTE RULES:
-- Output ONLY JSON
+RULES:
+- Respond ONLY with valid JSON
 - No explanations
-- No comments
 - No markdown
+- No comments
 - No extra text
-- No diagnostic messages
+- If unsure, return empty arrays
+- If no medicines, medicines must be []
+- If no advice, advice must be []
 
-JSON FORMAT (must match exactly):
+OUTPUT FORMAT (EXACT):
 
 {
   "medicines": [
@@ -31,8 +32,30 @@ JSON FORMAT (must match exactly):
   "advice": []
 }
 
-Doctor text:
+EXAMPLE INPUT:
+"Paracetamol 650 mg twice daily for 3 days, walk daily"
+
+EXAMPLE OUTPUT:
+{
+  "medicines": [
+    {
+      "name": "Paracetamol",
+      "dose": "650 mg",
+      "frequency": "Twice daily",
+      "timing": "",
+      "duration": "3 days"
+    }
+  ],
+  "advice": [
+    "Walk daily"
+  ]
+}
+
+NOW PROCESS THIS INPUT:
 ${text}
+
+REMEMBER:
+RETURN ONLY JSON.
 `
 
     const response = await fetch(
@@ -57,15 +80,22 @@ ${text}
     let outputText =
       data?.candidates?.[0]?.content?.parts?.[0]?.text || ""
 
-    // 🔴 HARD JSON EXTRACTION (CRITICAL)
-    const jsonStart = outputText.indexOf("{")
-    const jsonEnd = outputText.lastIndexOf("}")
+    // 🔒 STRICT JSON EXTRACTION
+    const start = outputText.indexOf("{")
+    const end = outputText.lastIndexOf("}")
 
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error("AI did not return JSON")
+    if (start === -1 || end === -1) {
+      // SAFE FALLBACK
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          medicines: [],
+          advice: [],
+        }),
+      }
     }
 
-    const jsonString = outputText.slice(jsonStart, jsonEnd + 1)
+    const jsonString = outputText.slice(start, end + 1)
     const parsed = JSON.parse(jsonString)
 
     return {
@@ -74,9 +104,10 @@ ${text}
     }
   } catch (err) {
     return {
-      statusCode: 500,
+      statusCode: 200,
       body: JSON.stringify({
-        error: err.message,
+        medicines: [],
+        advice: [],
       }),
     }
   }
