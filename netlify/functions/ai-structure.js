@@ -1,29 +1,71 @@
 export async function handler(event) {
   try {
-    const { text } = JSON.parse(event.body || "{}")
+    const body = JSON.parse(event.body || "{}")
+    const text = body.text
 
-    if (!text) {
+    if (!text || text.trim().length < 5) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "No text provided" }),
+        body: JSON.stringify({ error: "No valid text provided" }),
       }
     }
 
     const prompt = `
-You are a medical assistant.
+You are a medical prescription structuring engine.
 
-Your job is to convert doctor's free speech into STRICT JSON.
+Your ONLY job is to convert doctor's spoken text into STRUCTURED JSON.
 
-Rules (must follow):
-- Output MUST be valid JSON
-- Do NOT use markdown
-- Do NOT add explanations
-- Medicines MUST be an array
-- Each medicine MUST be a separate object
-- Advice MUST be an array
-- If a field is unknown, return empty string
+ABSOLUTE RULES (NO EXCEPTIONS):
+- EVERY medicine mentioned MUST be a SEPARATE object
+- NEVER merge two medicines into one
+- EVEN IF medicines are spoken in ONE sentence, SPLIT them
+- Advice MUST be split into individual points
+- If a value is missing, return empty string ""
+- Output MUST be VALID JSON ONLY
+- NO markdown
+- NO explanations
+- NO extra text
 
-Format:
+IMPORTANT:
+If doctor speech contains:
+"tablet A ..., tablet B ..., syrup C ..."
+
+Then medicines array MUST have 3 objects.
+
+EXAMPLE (YOU MUST FOLLOW THIS BEHAVIOR):
+
+Doctor speech:
+"Paracetamol 650 mg twice daily for 3 days, cough syrup three times a day, multivitamin once daily"
+
+Correct output:
+{
+  "medicines": [
+    {
+      "name": "Paracetamol",
+      "dose": "650 mg",
+      "frequency": "Twice daily",
+      "timing": "",
+      "duration": "3 days"
+    },
+    {
+      "name": "Cough syrup",
+      "dose": "",
+      "frequency": "Three times a day",
+      "timing": "",
+      "duration": ""
+    },
+    {
+      "name": "Multivitamin",
+      "dose": "",
+      "frequency": "Once daily",
+      "timing": "",
+      "duration": ""
+    }
+  ],
+  "advice": []
+}
+
+JSON SCHEMA (STRICT – FOLLOW EXACTLY):
 {
   "medicines": [
     {
@@ -61,12 +103,27 @@ ${text}
       structured = JSON.parse(raw)
     } catch (err) {
       return {
-        statusCode: 400,
+        statusCode: 422,
         body: JSON.stringify({
           error: "AI returned invalid JSON",
-          raw,
+          raw_output: raw,
         }),
       }
+    }
+
+    // HARD VALIDATION (last safety net)
+    if (!Array.isArray(structured.medicines)) {
+      return {
+        statusCode: 422,
+        body: JSON.stringify({
+          error: "Medicines is not an array",
+          raw_output: structured,
+        }),
+      }
+    }
+
+    if (!Array.isArray(structured.advice)) {
+      structured.advice = []
     }
 
     return {
