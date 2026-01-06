@@ -1,0 +1,74 @@
+/* ================================
+   DENSE PRESCRIPTION STYLE
+   ================================ */
+
+.print-page.dense {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+  font-family: Arial, sans-serif;
+  color: #000;
+}
+
+/* LETTERHEAD */
+.print-page.dense .letterhead {
+  width: 100%;
+  height: 150px;
+  object-fit: contain;
+  display: block;
+}
+
+/* PATIENT INFO */
+.print-page.dense .patient-header {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  border-bottom: 1px solid #000;
+}
+
+/* CONTENT GRID */
+.print-page.dense .content-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 12px;
+}
+
+/* TEXT */
+.print-page.dense p,
+.print-page.dense pre {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+/* HEADINGS */
+.print-page.dense h4 {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* SIGNATURE */
+.print-page.dense .signature {
+  margin-top: 30px;
+  text-align: right;
+  font-size: 11.5px;
+}
+
+/* PRINT */
+@media print {
+  body {
+    margin: 0;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-page.dense {
+    width: 210mm;
+    min-height: 297mm;
+  }
+}

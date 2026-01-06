@@ -1,0 +1,30 @@
+/* ===============================
+   PRINT STYLE PRESETS
+   =============================== */
+
+/* DEFAULT (Preset 1) */
+.print-style-default .prescription-content {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* CLEAN COMPACT (Preset 2) */
+.print-style-compact .prescription-content {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* LARGE TEXT (Preset 3) */
+.print-style-large .prescription-content {
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+/* MODERN CARD (Preset 4) */
+.print-style-card .prescription-content {
+  font-size: 14px;
+  line-height: 1.6;
+  border: 1px solid #ccc;
+  padding: 16px;
+  border-radius: 6px;
+}

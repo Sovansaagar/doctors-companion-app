@@ -1,0 +1,30 @@
+/* ================================
+   PRINT BASE (COMMON FOR ALL STYLES)
+   ================================ */
+
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 15mm;
+    box-sizing: border-box;
+  }
+}
+
+/* SCREEN PREVIEW */
+.print-page {
+  max-width: 900px;
+  margin: 20px auto;
+  background: white;
+  padding: 20px;
+}

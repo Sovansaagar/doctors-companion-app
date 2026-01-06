@@ -1,0 +1,46 @@
+/* SCREEN VIEW */
+.print-container {
+  width: 210mm;
+  margin: 0 auto;
+  background: white;
+  font-family: Arial, sans-serif;
+}
+
+.letterhead {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Prescription content starts immediately after letterhead */
+.prescription-content {
+  padding: 20px 25px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.no-print {
+  margin: 20px;
+}
+
+/* PRINT VIEW */
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-container {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+  }
+
+  .prescription-content {
+    padding: 15mm 20mm;
+  }
+}
