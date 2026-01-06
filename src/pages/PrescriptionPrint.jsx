@@ -29,7 +29,10 @@ function PrescriptionPrint({ setPage, id }) {
 
     setPrescription(pres)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     const path = `letterhead_${user.id}.jpg`
 
     const { data } = supabase
@@ -65,8 +68,10 @@ Advice: ${prescription.advice || ""}
 
     const aiResponse = await res.json()
 
-    // 🔴 IMPORTANT FIX: extract structured data ONLY
-    const structured = aiResponse.structured || aiResponse
+    // 🔴 IMPORTANT: normalize AI response shape
+    const structured = aiResponse.structured
+      ? aiResponse.structured
+      : aiResponse
 
     await supabase
       .from("prescriptions")
@@ -92,16 +97,26 @@ Advice: ${prescription.advice || ""}
       {/* PRINT PAGE */}
       <div className={`print-page ${style}`}>
         {letterheadUrl && (
-          <img src={letterheadUrl} className="letterhead" alt="Letterhead" />
+          <img
+            src={letterheadUrl}
+            className="letterhead"
+            alt="Letterhead"
+          />
         )}
 
         <div className="letterhead-divider"></div>
 
         {/* PATIENT INFO */}
         <div className="patient-box">
-          <div><strong>Patient:</strong> {prescription.patient_name}</div>
-          <div><strong>Age:</strong> {prescription.age}</div>
-          <div><strong>Gender:</strong> {prescription.gender}</div>
+          <div>
+            <strong>Patient:</strong> {prescription.patient_name}
+          </div>
+          <div>
+            <strong>Age:</strong> {prescription.age}
+          </div>
+          <div>
+            <strong>Gender:</strong> {prescription.gender}
+          </div>
           <div>
             <strong>Date:</strong>{" "}
             {new Date(prescription.visit_date).toLocaleDateString()}
@@ -157,7 +172,8 @@ Advice: ${prescription.advice || ""}
         </div>
 
         <div className="signature">
-          Doctor Signature<br />
+          Doctor Signature
+          <br />
           ____________________
         </div>
       </div>
@@ -189,6 +205,23 @@ Advice: ${prescription.advice || ""}
           <div style={{ color: "green", marginTop: 10 }}>
             AI structured prescription – please review before printing
           </div>
+        )}
+
+        {/* 🔴 FINAL DIAGNOSTIC BLOCK – DO NOT REMOVE YET */}
+        {editMode === "ai" && aiDraft && (
+          <pre
+            style={{
+              marginTop: 20,
+              padding: 10,
+              background: "#111",
+              color: "#0f0",
+              fontSize: 12,
+              maxHeight: 300,
+              overflow: "auto",
+            }}
+          >
+            {JSON.stringify(aiDraft, null, 2)}
+          </pre>
         )}
       </div>
     </>
