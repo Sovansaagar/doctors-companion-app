@@ -1,7 +1,7 @@
 export async function handler(event) {
   try {
     const body = JSON.parse(event.body || "{}")
-    const text = body.text
+    const text = body.text || ""
 
     if (!text || text.trim().length < 5) {
       return {
@@ -10,62 +10,63 @@ export async function handler(event) {
       }
     }
 
+    // -----------------------------
+    // PRE-PROCESSING (THE FIX)
+    // -----------------------------
+
+    const lines = text
+      .replace(/\n+/g, "\n")
+      .split(/[,.\n]/)
+      .map(l => l.trim())
+      .filter(Boolean)
+
+    let medicineLines = []
+    let adviceLines = []
+
+    for (const line of lines) {
+      const lower = line.toLowerCase()
+
+      if (
+        lower.includes("tablet") ||
+        lower.includes("mg") ||
+        lower.includes("syrup") ||
+        lower.includes("capsule") ||
+        lower.includes("once") ||
+        lower.includes("twice") ||
+        lower.includes("daily")
+      ) {
+        medicineLines.push(`MEDICINE_LINE: ${line}`)
+      } else {
+        adviceLines.push(`ADVICE_LINE: ${line}`)
+      }
+    }
+
+    const structuredInput = `
+${medicineLines.join("\n")}
+
+${adviceLines.join("\n")}
+`
+
+    // -----------------------------
+    // GEMINI PROMPT
+    // -----------------------------
+
     const prompt = `
 You are a medical prescription structuring engine.
 
-Your ONLY job is to convert doctor's spoken text into STRUCTURED JSON.
+You will receive text with EXPLICIT markers.
 
-ABSOLUTE RULES (NO EXCEPTIONS):
-- EVERY medicine mentioned MUST be a SEPARATE object
-- NEVER merge two medicines into one
-- EVEN IF medicines are spoken in ONE sentence, SPLIT them
-- Advice MUST be split into individual points
-- If a value is missing, return empty string ""
+RULES (MANDATORY):
+- Each MEDICINE_LINE represents ONE medicine
+- NEVER merge medicines
+- Extract name, dose, frequency, timing, duration
+- Each ADVICE_LINE is ONE advice item
 - Output MUST be VALID JSON ONLY
 - NO markdown
 - NO explanations
 - NO extra text
 
-IMPORTANT:
-If doctor speech contains:
-"tablet A ..., tablet B ..., syrup C ..."
-
-Then medicines array MUST have 3 objects.
-
-EXAMPLE (YOU MUST FOLLOW THIS BEHAVIOR):
-
-Doctor speech:
-"Paracetamol 650 mg twice daily for 3 days, cough syrup three times a day, multivitamin once daily"
-
-Correct output:
-{
-  "medicines": [
-    {
-      "name": "Paracetamol",
-      "dose": "650 mg",
-      "frequency": "Twice daily",
-      "timing": "",
-      "duration": "3 days"
-    },
-    {
-      "name": "Cough syrup",
-      "dose": "",
-      "frequency": "Three times a day",
-      "timing": "",
-      "duration": ""
-    },
-    {
-      "name": "Multivitamin",
-      "dose": "",
-      "frequency": "Once daily",
-      "timing": "",
-      "duration": ""
-    }
-  ],
-  "advice": []
-}
-
-JSON SCHEMA (STRICT – FOLLOW EXACTLY):
+JSON FORMAT (FOLLOW EXACTLY):
 {
   "medicines": [
     {
@@ -79,8 +80,8 @@ JSON SCHEMA (STRICT – FOLLOW EXACTLY):
   "advice": []
 }
 
-Doctor speech:
-${text}
+INPUT:
+${structuredInput}
 `
 
     const response = await fetch(
@@ -111,20 +112,8 @@ ${text}
       }
     }
 
-    // HARD VALIDATION (last safety net)
-    if (!Array.isArray(structured.medicines)) {
-      return {
-        statusCode: 422,
-        body: JSON.stringify({
-          error: "Medicines is not an array",
-          raw_output: structured,
-        }),
-      }
-    }
-
-    if (!Array.isArray(structured.advice)) {
-      structured.advice = []
-    }
+    if (!Array.isArray(structured.medicines)) structured.medicines = []
+    if (!Array.isArray(structured.advice)) structured.advice = []
 
     return {
       statusCode: 200,
