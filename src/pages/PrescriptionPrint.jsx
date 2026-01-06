@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../supabase"
 
-// IMPORT ALL STYLES
+// PRINT STYLES
 import "../styles/print-classic.css"
 import "../styles/print-modern.css"
 import "../styles/print-minimal.css"
@@ -12,8 +12,9 @@ function PrescriptionPrint({ setPage, id }) {
   const [letterheadUrl, setLetterheadUrl] = useState(null)
 
   const [style, setStyle] = useState("classic")
-  const [editMode, setEditMode] = useState("preview") // preview | ai | manual
+  const [editMode, setEditMode] = useState("preview") // preview | ai
   const [aiDraft, setAiDraft] = useState(null)
+  const [aiLoading, setAiLoading] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -39,66 +40,68 @@ function PrescriptionPrint({ setPage, id }) {
     setLetterheadUrl(data.publicUrl)
   }
 
+  async function runAIEdit() {
+    if (!prescription) return
+
+    setAiLoading(true)
+
+    const rawText = `
+History: ${prescription.history || ""}
+
+Vitals: ${prescription.vitals || ""}
+
+Diagnosis: ${prescription.diagnosis || ""}
+
+Medicines: ${prescription.medicines || ""}
+
+Advice: ${prescription.advice || ""}
+`
+
+    const res = await fetch("/.netlify/functions/ai-structure", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: rawText }),
+    })
+
+    const structured = await res.json()
+
+    await supabase
+      .from("prescriptions")
+      .update({
+        ai_raw_text: rawText,
+        ai_structured_json: structured,
+      })
+      .eq("id", prescription.id)
+
+    setAiDraft(structured)
+    setEditMode("ai")
+    setAiLoading(false)
+  }
+
   function handlePrint() {
     window.print()
   }
 
-  // 🔹 FAKE AI FORMATTER (STEP 2.8)
-  function formatWithFakeAI(pres) {
-    return {
-      ...pres,
-
-      history: pres.history
-        ? pres.history.replace(/\./g, ".\n")
-        : "",
-
-      diagnosis: pres.diagnosis
-        ? pres.diagnosis.replace(/\./g, ".\n")
-        : "",
-
-      medicines: pres.medicines
-        ? pres.medicines
-            .split(/,| and /i)
-            .map((m, i) => `${i + 1}. ${m.trim()}`)
-            .join("\n")
-        : "",
-
-      advice: pres.advice
-        ? pres.advice
-            .split(/,| and /i)
-            .map(a => `• ${a.trim()}`)
-            .join("\n")
-        : "",
-    }
-  }
-
   if (!prescription) return null
-
-  const displayData =
-    editMode === "ai" && aiDraft ? aiDraft : prescription
 
   return (
     <>
       {/* PRINT PAGE */}
       <div className={`print-page ${style}`}>
         {letterheadUrl && (
-          <img
-            src={letterheadUrl}
-            className="letterhead"
-            alt="Letterhead"
-          />
+          <img src={letterheadUrl} className="letterhead" alt="Letterhead" />
         )}
 
         <div className="letterhead-divider"></div>
 
         {/* PATIENT INFO */}
         <div className="patient-box">
-          <div><strong>Patient:</strong> {displayData.patient_name}</div>
-          <div><strong>Age:</strong> {displayData.age}</div>
-          <div><strong>Gender:</strong> {displayData.gender}</div>
+          <div><strong>Patient:</strong> {prescription.patient_name}</div>
+          <div><strong>Age:</strong> {prescription.age}</div>
+          <div><strong>Gender:</strong> {prescription.gender}</div>
           <div>
             <strong>Date:</strong>{" "}
-            {new Date(displayData.visit_date).toLocaleDateString()}
+            {new Date(prescription.visit_date).toLocaleDateString()}
           </div>
         </div>
 
@@ -106,23 +109,47 @@ function PrescriptionPrint({ setPage, id }) {
         <div className="clinical-grid">
           <div className="left">
             <h4>History</h4>
-            <pre>{displayData.history}</pre>
+            <pre>{prescription.history}</pre>
 
             <h4>Vitals</h4>
-            <pre>{displayData.vitals}</pre>
+            <pre>{prescription.vitals}</pre>
 
             <h4>Diagnosis</h4>
-            <pre>{displayData.diagnosis}</pre>
+            <pre>{prescription.diagnosis}</pre>
           </div>
 
           <div className="divider"></div>
 
           <div className="right">
             <h4>Medicines</h4>
-            <pre>{displayData.medicines}</pre>
+
+            {editMode === "ai" && aiDraft?.medicines ? (
+              <ol>
+                {aiDraft.medicines.map((m, i) => (
+                  <li key={i}>
+                    {m.name}
+                    {m.dose && ` ${m.dose}`}
+                    {m.frequency && ` — ${m.frequency}`}
+                    {m.timing && ` (${m.timing})`}
+                    {m.duration && ` for ${m.duration}`}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <pre>{prescription.medicines}</pre>
+            )}
 
             <h4 className="advice">Advice</h4>
-            <pre>{displayData.advice}</pre>
+
+            {editMode === "ai" && aiDraft?.advice ? (
+              <ul>
+                {aiDraft.advice.map((a, i) => (
+                  <li key={i}>{a}</li>
+                ))}
+              </ul>
+            ) : (
+              <pre>{prescription.advice}</pre>
+            )}
           </div>
         </div>
 
@@ -134,8 +161,6 @@ function PrescriptionPrint({ setPage, id }) {
 
       {/* CONTROLS */}
       <div className="no-print">
-
-        {/* STYLE SWITCHER */}
         <div style={{ marginBottom: 10 }}>
           <button onClick={() => setStyle("classic")}>Classic</button>{" "}
           <button onClick={() => setStyle("modern")}>Modern</button>{" "}
@@ -143,28 +168,25 @@ function PrescriptionPrint({ setPage, id }) {
           <button onClick={() => setStyle("dense")}>Dense</button>
         </div>
 
-        {/* EDIT FLOW */}
         <div style={{ marginBottom: 10 }}>
-          <button
-            onClick={() => {
-              const formatted = formatWithFakeAI(prescription)
-              setAiDraft(formatted)
-              setEditMode("ai")
-            }}
-          >
-            EDIT WITH AI
-          </button>{" "}
-
-          <button onClick={() => setEditMode("manual")}>
-            MANUAL EDIT
+          <button onClick={runAIEdit} disabled={aiLoading}>
+            {aiLoading ? "AI is structuring..." : "EDIT WITH AI"}
           </button>
         </div>
 
-        <button onClick={handlePrint}>Print</button>
+        <button onClick={handlePrint} disabled={!aiDraft}>
+          Print
+        </button>
 
         <button onClick={() => setPage({ name: "prescription_list" })}>
           Back
         </button>
+
+        {editMode === "ai" && (
+          <div style={{ color: "green", marginTop: 10 }}>
+            AI structured prescription – please review before printing
+          </div>
+        )}
       </div>
     </>
   )
