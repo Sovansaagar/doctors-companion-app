@@ -41,6 +41,7 @@ function PrescriptionPrint({ setPage, id }) {
   }
 
   async function runAIEdit() {
+    alert("EDIT WITH AI CLICKED")
     if (!prescription) return
 
     setAiLoading(true)
@@ -86,6 +87,10 @@ Advice: ${prescription.advice || ""}
 
   return (
     <>
+    <div style={{ background: "red", color: "white", padding: 10 }}>
+  PRESCRIPTION PRINT – NEW CODE ACTIVE
+</div>
+
       {/* PRINT PAGE */}
       <div className={`print-page ${style}`}>
         {letterheadUrl && (
