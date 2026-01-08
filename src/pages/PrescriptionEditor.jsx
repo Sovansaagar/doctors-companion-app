@@ -1,217 +1,164 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { supabase } from "../supabase"
 
-/*
-  NOTE:
-  - This component assumes you ALREADY have voice-to-text working.
-  - Replace `startVoiceListening()` with your existing mic logic.
-*/
+function PrescriptionEditor({ setPage, id }) {
+  const [prescription, setPrescription] = useState(null)
 
-function PrescriptionEditor() {
-  // ===== DATA STATE =====
   const [medicines, setMedicines] = useState([])
   const [advice, setAdvice] = useState([])
 
-  const [currentMedicineText, setCurrentMedicineText] = useState("")
-  const [currentAdviceText, setCurrentAdviceText] = useState("")
+  const recognitionRef = useRef(null)
+  const [listeningFor, setListeningFor] = useState(null)
+  const [replaceIndex, setReplaceIndex] = useState(null)
 
-  // { type: "medicine" | "advice", id: string }
-  const [replaceTarget, setReplaceTarget] = useState(null)
+  useEffect(() => {
+    loadPrescription()
+  }, [])
 
-  const [activeInput, setActiveInput] = useState(null) 
-  // "medicine" | "advice"
+  async function loadPrescription() {
+    const { data } = await supabase
+      .from("prescriptions")
+      .select("*")
+      .eq("id", id)
+      .single()
 
-  // ===== VOICE HANDLER (CORE LOGIC) =====
-  function onVoiceResult(transcript) {
-    if (!transcript) return
+    setPrescription(data)
+    setMedicines(data.medicines || [])
+    setAdvice(data.advice || [])
+  }
 
-    // 🔁 REPLACE MODE
-    if (replaceTarget) {
-      if (replaceTarget.type === "medicine") {
-        setMedicines(prev =>
-          prev.map(m =>
-            m.id === replaceTarget.id
-              ? { ...m, text: transcript }
-              : m
-          )
-        )
-      }
-
-      if (replaceTarget.type === "advice") {
-        setAdvice(prev =>
-          prev.map(a =>
-            a.id === replaceTarget.id
-              ? { ...a, text: transcript }
-              : a
-          )
-        )
-      }
-
-      setReplaceTarget(null)
-      setActiveInput(null)
+  function startListening(mode, index = null) {
+    if (!("webkitSpeechRecognition" in window)) {
+      alert("Speech recognition not supported")
       return
     }
 
-    // ➕ ADD MODE
-    if (activeInput === "medicine") {
-      setCurrentMedicineText(transcript)
+    const recognition = new window.webkitSpeechRecognition()
+    recognition.lang = "en-IN"
+    recognition.continuous = false
+    recognition.interimResults = false
+
+    recognition.onresult = (event) => {
+      const text = event.results[0][0].transcript.trim()
+
+      if (mode === "medicine") {
+        if (index === null) {
+          setMedicines((prev) => [...prev, text])
+        } else {
+          setMedicines((prev) =>
+            prev.map((m, i) => (i === index ? text : m))
+          )
+        }
+      }
+
+      if (mode === "advice") {
+        if (index === null) {
+          setAdvice((prev) => [...prev, text])
+        } else {
+          setAdvice((prev) =>
+            prev.map((a, i) => (i === index ? text : a))
+          )
+        }
+      }
+
+      setListeningFor(null)
+      setReplaceIndex(null)
     }
 
-    if (activeInput === "advice") {
-      setCurrentAdviceText(transcript)
+    recognition.onerror = () => {
+      setListeningFor(null)
+      setReplaceIndex(null)
     }
+
+    recognition.start()
+    recognitionRef.current = recognition
+    setListeningFor(mode)
+    setReplaceIndex(index)
   }
 
-  // ===== MIC STARTERS =====
-  function startMedicineMic() {
-    setActiveInput("medicine")
-    startVoiceListening(onVoiceResult)
+  async function savePrescription() {
+    await supabase
+      .from("prescriptions")
+      .update({
+        medicines,
+        advice,
+      })
+      .eq("id", id)
+
+    alert("Prescription saved")
   }
 
-  function startAdviceMic() {
-    setActiveInput("advice")
-    startVoiceListening(onVoiceResult)
-  }
-
-  function startReplaceMic(type, id) {
-    setReplaceTarget({ type, id })
-    startVoiceListening(onVoiceResult)
-  }
-
-  // ===== ADD BUTTONS =====
-  function addNextMedicine() {
-    if (!currentMedicineText.trim()) return
-
-    setMedicines(prev => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        text: currentMedicineText,
-      },
-    ])
-
-    setCurrentMedicineText("")
-  }
-
-  function addNextAdvice() {
-    if (!currentAdviceText.trim()) return
-
-    setAdvice(prev => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        text: currentAdviceText,
-      },
-    ])
-
-    setCurrentAdviceText("")
-  }
+  if (!prescription) return null
 
   return (
-    <div style={{ padding: 16, maxWidth: 600, margin: "auto" }}>
-      <h2>Prescription</h2>
+    <div style={{ padding: 20 }}>
+      <h2>Prescription Editor</h2>
 
-      {/* ===== MEDICINES ===== */}
-      <h3>Medicines</h3>
+      {/* MEDICINES */}
+      <section style={{ marginBottom: 30 }}>
+        <h3>Medicines</h3>
 
-      {medicines.map((m, index) => (
-        <div
-          key={m.id}
-          style={{
-            border: "1px solid #ddd",
-            padding: 8,
-            marginBottom: 8,
-          }}
-        >
-          <strong>{index + 1}.</strong> {m.text}
-          <br />
-          <button
-            onClick={() => startReplaceMic("medicine", m.id)}
-            style={{ marginTop: 4 }}
-          >
-            🎤 Replace
-          </button>
-        </div>
-      ))}
+        <ol>
+          {medicines.map((m, i) => (
+            <li key={i} style={{ marginBottom: 10 }}>
+              {m}
+              <br />
+              <button
+                onClick={() => startListening("medicine", i)}
+                style={{ marginTop: 5 }}
+              >
+                Delete & Replace (Voice)
+              </button>
+            </li>
+          ))}
+        </ol>
 
-      <textarea
-        placeholder="Speak one medicine…"
-        value={currentMedicineText}
-        readOnly
-        style={{ width: "100%", marginTop: 8 }}
-      />
-
-      <div style={{ marginTop: 6 }}>
-        <button onClick={startMedicineMic}>🎤 Mic</button>{" "}
-        <button onClick={addNextMedicine}>
-          ➕ Add Next Medicine
+        <button onClick={() => startListening("medicine")}>
+          ➕ Add Next Medicine (Voice)
         </button>
-      </div>
+      </section>
 
-      {/* ===== ADVICE ===== */}
-      <h3 style={{ marginTop: 24 }}>Advice</h3>
+      {/* ADVICE */}
+      <section style={{ marginBottom: 30 }}>
+        <h3>Advice</h3>
 
-      {advice.map((a, index) => (
-        <div
-          key={a.id}
-          style={{
-            border: "1px solid #ddd",
-            padding: 8,
-            marginBottom: 8,
-          }}
-        >
-          • {a.text}
-          <br />
-          <button
-            onClick={() => startReplaceMic("advice", a.id)}
-            style={{ marginTop: 4 }}
-          >
-            🎤 Replace
-          </button>
-        </div>
-      ))}
+        <ul>
+          {advice.map((a, i) => (
+            <li key={i} style={{ marginBottom: 10 }}>
+              {a}
+              <br />
+              <button
+                onClick={() => startListening("advice", i)}
+                style={{ marginTop: 5 }}
+              >
+                Delete & Replace (Voice)
+              </button>
+            </li>
+          ))}
+        </ul>
 
-      <textarea
-        placeholder="Speak one advice…"
-        value={currentAdviceText}
-        readOnly
-        style={{ width: "100%", marginTop: 8 }}
-      />
-
-      <div style={{ marginTop: 6 }}>
-        <button onClick={startAdviceMic}>🎤 Mic</button>{" "}
-        <button onClick={addNextAdvice}>
-          ➕ Add Next Advice
+        <button onClick={() => startListening("advice")}>
+          ➕ Add Next Advice (Voice)
         </button>
-      </div>
+      </section>
 
-      {/* ===== REPLACE INDICATOR ===== */}
-      {replaceTarget && (
-        <div style={{ marginTop: 16, color: "red" }}>
-          🎤 Listening for replacement…
+      {/* STATUS */}
+      {listeningFor && (
+        <div style={{ color: "green", marginBottom: 20 }}>
+          🎙 Listening for {listeningFor}...
         </div>
       )}
+
+      {/* ACTIONS */}
+      <button onClick={savePrescription}>Save</button>{" "}
+      <button onClick={() => setPage({ name: "prescription_print", id })}>
+        Preview & Print
+      </button>{" "}
+      <button onClick={() => setPage({ name: "prescription_list" })}>
+        Back
+      </button>
     </div>
   )
 }
 
 export default PrescriptionEditor
-
-/*
-================================================
-PLACEHOLDER — CONNECT YOUR EXISTING MIC LOGIC
-================================================
-
-Replace this with your current voice input code.
-Example using Web Speech API:
-
-function startVoiceListening(onResult) {
-  const recognition = new window.SpeechRecognition()
-  recognition.lang = "en-IN"
-  recognition.onresult = e => {
-    const transcript = e.results[0][0].transcript
-    onResult(transcript)
-  }
-  recognition.start()
-}
-
-*/
