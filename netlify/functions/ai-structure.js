@@ -1,38 +1,33 @@
 export async function handler(event) {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: "Missing GEMINI_API_KEY" }),
-      }
-    }
-
     const { text } = JSON.parse(event.body || "{}")
 
-    if (!text || text.trim().length < 10) {
+    if (!text || text.trim().length < 5) {
       return {
-        statusCode: 200,
-        body: JSON.stringify({
-          medicines: [],
-          advice: [],
-        }),
+        statusCode: 400,
+        body: JSON.stringify({ error: "No valid text provided" }),
       }
     }
 
     const prompt = `
-You are a senior clinical assistant.
+You are a medical data extraction engine.
 
-Your task is to STRUCTURE the doctor's prescription text into VALID JSON.
+Your task is to convert the doctor's text into STRICT JSON.
 
-VERY IMPORTANT RULES:
+RULES (VERY IMPORTANT):
 - Output ONLY valid JSON
-- No markdown
-- No explanations
-- No backticks
-- No extra text before or after JSON
-- Always return arrays (even if empty)
+- Do NOT add explanations
+- Do NOT add markdown
+- Do NOT add text before or after JSON
+- Medicines MUST be an array
+- Each medicine MUST be a separate object
+- Advice MUST be an array
+- If something is unknown, use empty string ""
+- NEVER merge multiple medicines into one
+- NEVER return null
 
-JSON FORMAT (STRICT):
+RETURN FORMAT (EXACT):
+
 {
   "medicines": [
     {
@@ -59,20 +54,26 @@ ${text}
         body: JSON.stringify({
           contents: [
             {
+              role: "user",
               parts: [{ text: prompt }],
             },
           ],
+          generationConfig: {
+            temperature: 0,
+            topP: 0.1,
+            topK: 1,
+            maxOutputTokens: 512,
+          },
         }),
       }
     )
 
     const data = await response.json()
-
-    const rawOutput =
+    const rawText =
       data?.candidates?.[0]?.content?.parts?.[0]?.text || ""
 
-    // 🔒 SAFETY: Extract JSON even if Gemini adds junk
-    const jsonMatch = rawOutput.match(/\{[\s\S]*\}/)
+    // 🔐 SAFE JSON EXTRACTION
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/)
 
     if (!jsonMatch) {
       return {
@@ -80,8 +81,6 @@ ${text}
         body: JSON.stringify({
           medicines: [],
           advice: [],
-          _debug: "No JSON found in Gemini response",
-          _raw: rawOutput,
         }),
       }
     }
@@ -95,30 +94,38 @@ ${text}
         body: JSON.stringify({
           medicines: [],
           advice: [],
-          _debug: "JSON parse failed",
-          _raw: jsonMatch[0],
         }),
       }
     }
 
-    // Final hard guarantee
+    // 🛡️ HARD STRUCTURE VALIDATION
+    const medicines = Array.isArray(parsed.medicines)
+      ? parsed.medicines.map(m => ({
+          name: m.name || "",
+          dose: m.dose || "",
+          frequency: m.frequency || "",
+          timing: m.timing || "",
+          duration: m.duration || "",
+        }))
+      : []
+
+    const advice = Array.isArray(parsed.advice)
+      ? parsed.advice.filter(a => typeof a === "string")
+      : []
+
     return {
       statusCode: 200,
       body: JSON.stringify({
-        medicines: Array.isArray(parsed.medicines)
-          ? parsed.medicines
-          : [],
-        advice: Array.isArray(parsed.advice)
-          ? parsed.advice
-          : [],
+        medicines,
+        advice,
       }),
     }
   } catch (err) {
     return {
-      statusCode: 500,
+      statusCode: 200,
       body: JSON.stringify({
-        error: "Function crashed",
-        message: err.message,
+        medicines: [],
+        advice: [],
       }),
     }
   }
